@@ -33,11 +33,11 @@ jobs:
             Write-Host "[!] Continuing anyway... (might face blocking issues)"
           }
 
-      - name: Download RAR with retries
+      - name: Download ZIP with retries
         shell: powershell
         run: |
-          $url = 'https://github.com/masezahedi/MasoudApp/raw/main/Masoud-6.24.0-windows-x64.rar'
-          $out = 'C:\app\app.rar'
+          $url = 'https://github.com/masezahedi/MasoudApp/raw/main/Masoud-6.24.0-windows-x64.zip'
+          $out = 'C:\app\app.zip'
           $maxAttempts = 3
           $attempt = 0
           $success = $false
@@ -73,51 +73,30 @@ jobs:
             exit 1
           }
 
-      - name: Install unrar
+      - name: Extract ZIP
         shell: powershell
         run: |
-          Write-Host "[*] Installing unrar via chocolatey..."
-          try {
-            choco install unrar -y -ErrorAction Stop | Out-Null
-            Write-Host "[OK] unrar installed successfully"
-          } catch {
-            Write-Host "[ERR] Failed to install unrar: $($_.Exception.Message)"
-            exit 1
-          }
-
-      - name: Extract RAR
-        shell: powershell
-        run: |
-          $in = 'C:\app\app.rar'
+          $in = 'C:\app\app.zip'
           $dest = 'C:\app'
 
           if (-not (Test-Path $in)) {
-            Write-Host "[ERR] RAR file not found: $in"
+            Write-Host "[ERR] ZIP file not found: $in"
             exit 1
           }
 
           Write-Host "[*] Extracting $in to $dest..."
-          Write-Host "[*] RAR file info:"
+          Write-Host "[*] ZIP file info:"
           Get-Item $in | Select-Object Name, Length, LastWriteTime | Format-Table
           
           try {
-            Write-Host "[*] Running: unrar x $in $dest"
-            unrar x $in $dest
-            $exit = $LASTEXITCODE
-            Write-Host "[*] unrar exit code: $exit"
+            Write-Host "[*] Using Expand-Archive to extract ZIP..."
+            Expand-Archive -Path $in -DestinationPath $dest -Force -ErrorAction Stop
+            Write-Host "[OK] Extraction completed successfully"
             
-            if ($exit -eq 0) {
-              Write-Host "[OK] Extraction completed successfully"
-              $items = @(Get-ChildItem $dest -Recurse -ErrorAction SilentlyContinue)
-              Write-Host "[OK] Total items after extraction: $($items.Count)"
-              Write-Host "[*] Directory contents:"
-              Get-ChildItem $dest | Format-Table Name, Length
-            } else {
-              Write-Host "[ERR] Extraction failed with exit code: $exit"
-              Write-Host "[*] Trying alternative extraction method..."
-              Expand-Archive -Path $in -DestinationPath $dest -Force -ErrorAction Stop
-              Write-Host "[OK] Alternative extraction completed"
-            }
+            $items = @(Get-ChildItem $dest -Recurse -ErrorAction SilentlyContinue)
+            Write-Host "[OK] Total items after extraction: $($items.Count)"
+            Write-Host "[*] Directory contents:"
+            Get-ChildItem $dest -Depth 1 | Format-Table Name, Length
           } catch {
             Write-Host "[ERR] Exception during extraction: $($_.Exception.Message)"
             exit 1
