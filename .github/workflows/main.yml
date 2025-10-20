@@ -14,25 +14,23 @@ jobs:
         run: |
           New-Item -Path C:\app -ItemType Directory -Force | Out-Null
           New-Item -Path C:\app\logs -ItemType Directory -Force | Out-Null
-          Write-Host "✓ Prepared C:\app and C:\app\logs"
+          Write-Host "[OK] Prepared C:\app and C:\app\logs"
 
       - name: Add Windows Defender exclusions (BEFORE download)
         shell: powershell
         run: |
-          Write-Host "⏳ Configuring Windows Defender exclusions..."
+          Write-Host "[*] Configuring Windows Defender exclusions..."
           try {
-            # Exclude the entire folder
             Add-MpPreference -ExclusionPath "C:\app" -ErrorAction Stop
-            Write-Host "✓ Added folder exclusion: C:\app"
+            Write-Host "[OK] Added folder exclusion: C:\app"
             
-            # Exclude the specific process
             Add-MpPreference -ExclusionProcess "masoud.exe" -ErrorAction Stop
-            Write-Host "✓ Added process exclusion: masoud.exe"
+            Write-Host "[OK] Added process exclusion: masoud.exe"
             
-            Write-Host "✓ All Defender exclusions configured successfully"
+            Write-Host "[OK] All Defender exclusions configured successfully"
           } catch {
-            Write-Host "⚠ Warning: Could not add exclusions: $($_.Exception.Message)"
-            Write-Host "  Continuing anyway... (might face blocking issues)"
+            Write-Host "[!] Warning: Could not add exclusions: $($_.Exception.Message)"
+            Write-Host "[!] Continuing anyway... (might face blocking issues)"
           }
 
       - name: Download RAR with retries
@@ -46,43 +44,44 @@ jobs:
 
           while ($attempt -lt $maxAttempts -and -not $success) {
             $attempt++
-            Write-Host "⏳ Download attempt $attempt/$maxAttempts..."
+            Write-Host "[*] Download attempt $attempt/$maxAttempts..."
             try {
               Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing -ErrorAction Stop
               if (Test-Path $out) {
                 $size = (Get-Item $out).Length
-                Write-Host "✓ Downloaded successfully - Size: $([math]::Round($size/1MB, 2)) MB"
+                $sizeMB = [math]::Round($size/1MB, 2)
+                Write-Host "[OK] Downloaded successfully - Size: $sizeMB MB"
                 if ($size -gt 0) {
                   $success = $true
                 } else {
-                  Write-Host "✗ File size is 0 bytes"
+                  Write-Host "[ERR] File size is 0 bytes"
                 }
               } else {
-                Write-Host "✗ File not found after download"
+                Write-Host "[ERR] File not found after download"
               }
             } catch {
-              Write-Host "✗ Attempt $attempt failed: $($_.Exception.Message)"
+              Write-Host "[ERR] Attempt $attempt failed: $($_.Exception.Message)"
             }
             if (-not $success -and $attempt -lt $maxAttempts) { 
-              Write-Host "  Waiting 5 seconds before retry..."
+              Write-Host "[*] Waiting 5 seconds before retry..."
               Start-Sleep -Seconds 5 
             }
           }
 
           if (-not $success) {
-            Write-Host "✗ ALL DOWNLOAD ATTEMPTS FAILED"
+            Write-Host "[ERR] ALL DOWNLOAD ATTEMPTS FAILED"
             exit 1
           }
 
       - name: Install unrar
         shell: powershell
         run: |
-          Write-Host "⏳ Installing unrar via chocolatey..."
+          Write-Host "[*] Installing unrar via chocolatey..."
           try {
             choco install unrar -y -ErrorAction Stop | Out-Null
-            Write-Host "✓ unrar installed successfully"
+            Write-Host "[OK] unrar installed successfully"
           } catch {
-            Write-Host "✗ Failed to install unrar: $($_.Exception.Message)"
+            Write-Host "[ERR] Failed to install unrar: $($_.Exception.Message)"
             exit 1
           }
 
@@ -93,24 +92,24 @@ jobs:
           $dest = 'C:\app'
 
           if (-not (Test-Path $in)) {
-            Write-Host "✗ RAR file not found: $in"
+            Write-Host "[ERR] RAR file not found: $in"
             exit 1
           }
 
-          Write-Host "⏳ Extracting $in..."
+          Write-Host "[*] Extracting $in..."
           try {
             unrar x $in $dest *>&1 | Out-Null
             $exit = $LASTEXITCODE
             if ($exit -eq 0) {
-              Write-Host "✓ Extraction completed successfully"
+              Write-Host "[OK] Extraction completed successfully"
               $items = @(Get-ChildItem $dest -Recurse -ErrorAction SilentlyContinue)
-              Write-Host "  Files extracted: $($items.Count) items"
+              Write-Host "[OK] Files extracted: $($items.Count) items"
             } else {
-              Write-Host "✗ Extraction failed with exit code: $exit"
+              Write-Host "[ERR] Extraction failed with exit code: $exit"
               exit 1
             }
           } catch {
-            Write-Host "✗ Exception during extraction: $($_.Exception.Message)"
+            Write-Host "[ERR] Exception during extraction: $($_.Exception.Message)"
             exit 1
           }
 
@@ -118,16 +117,16 @@ jobs:
         shell: powershell
         id: findexe
         run: |
-          Write-Host "⏳ Searching for masoud.exe..."
+          Write-Host "[*] Searching for masoud.exe..."
           $exe = Get-ChildItem -Path C:\app -Recurse -Filter "masoud.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
           
           if (-not $exe) {
-            Write-Host "✗ masoud.exe not found!"
+            Write-Host "[ERR] masoud.exe not found!"
             exit 1
           }
           
           $path = $exe.FullName
-          Write-Host "✓ Found masoud.exe at: $path"
+          Write-Host "[OK] Found masoud.exe at: $path"
           Add-Content -Path $env:GITHUB_OUTPUT -Value "exePath=$path"
 
       - name: Run masoud.exe
@@ -136,30 +135,30 @@ jobs:
           $exePath = '${{ steps.findexe.outputs.exePath }}'
           
           if (-not (Test-Path $exePath)) {
-            Write-Host "✗ Executable not found at: $exePath"
+            Write-Host "[ERR] Executable not found at: $exePath"
             exit 1
           }
           
-          Write-Host "⏳ Running masoud.exe..."
-          Write-Host "  Path: $exePath"
+          Write-Host "[*] Running masoud.exe..."
+          Write-Host "[*] Path: $exePath"
           try {
             & $exePath *> C:\app\masoud_output.log
             $exit = $LASTEXITCODE
             
             if ($exit -eq 0) {
-              Write-Host "✓ Program executed successfully (exit code: 0)"
+              Write-Host "[OK] Program executed successfully (exit code: 0)"
             } else {
-              Write-Host "⚠ Program finished with exit code: $exit"
+              Write-Host "[!] Program finished with exit code: $exit"
             }
             
             Write-Host ""
-            Write-Host "📄 Program output (first 100 lines):"
-            Write-Host "───────────────────────────────────"
+            Write-Host "[*] Program output (first 100 lines):"
+            Write-Host "======================================"
             Get-Content C:\app\masoud_output.log -TotalCount 100
-            Write-Host "───────────────────────────────────"
+            Write-Host "======================================"
             
           } catch {
-            Write-Host "✗ Exception while running program: $($_.Exception.Message)"
+            Write-Host "[ERR] Exception while running program: $($_.Exception.Message)"
             exit 1
           }
 
@@ -168,27 +167,28 @@ jobs:
         if: always()
         run: |
           Write-Host ""
-          Write-Host "╔════════════════════════════════════╗"
-          Write-Host "║        EXECUTION SUMMARY           ║"
-          Write-Host "╚════════════════════════════════════╝"
+          Write-Host "======================================"
+          Write-Host "        EXECUTION SUMMARY"
+          Write-Host "======================================"
           Write-Host ""
           
           $items = @(Get-ChildItem C:\app -Recurse -ErrorAction SilentlyContinue)
-          Write-Host "Total files in C:\app: $($items.Count)"
+          Write-Host "[*] Total files in C:\app: $($items.Count)"
           
           if (Test-Path C:\app\masoud_output.log) {
             $outputSize = (Get-Item C:\app\masoud_output.log).Length
-            Write-Host "Program output file size: $([math]::Round($outputSize/1KB, 2)) KB"
+            $outputSizeKB = [math]::Round($outputSize/1KB, 2)
+            Write-Host "[*] Program output file size: $outputSizeKB KB"
           }
           
           Write-Host ""
-          Write-Host "Log files created:"
+          Write-Host "[*] Log files created:"
           Get-ChildItem C:\app\logs -ErrorAction SilentlyContinue | ForEach-Object {
-            Write-Host "  • $($_.Name)"
+            Write-Host "    - $($_.Name)"
           }
           
           Write-Host ""
-          Write-Host "✓ Workflow completed"
+          Write-Host "[OK] Workflow completed"
 
       - name: Upload artifacts
         if: always()
