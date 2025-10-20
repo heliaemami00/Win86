@@ -96,17 +96,27 @@ jobs:
             exit 1
           }
 
-          Write-Host "[*] Extracting $in..."
+          Write-Host "[*] Extracting $in to $dest..."
+          Write-Host "[*] RAR file info:"
+          Get-Item $in | Select-Object Name, Length, LastWriteTime | Format-Table
+          
           try {
-            unrar x $in $dest *>&1 | Out-Null
+            Write-Host "[*] Running: unrar x $in $dest"
+            unrar x $in $dest
             $exit = $LASTEXITCODE
+            Write-Host "[*] unrar exit code: $exit"
+            
             if ($exit -eq 0) {
               Write-Host "[OK] Extraction completed successfully"
               $items = @(Get-ChildItem $dest -Recurse -ErrorAction SilentlyContinue)
-              Write-Host "[OK] Files extracted: $($items.Count) items"
+              Write-Host "[OK] Total items after extraction: $($items.Count)"
+              Write-Host "[*] Directory contents:"
+              Get-ChildItem $dest | Format-Table Name, Length
             } else {
               Write-Host "[ERR] Extraction failed with exit code: $exit"
-              exit 1
+              Write-Host "[*] Trying alternative extraction method..."
+              Expand-Archive -Path $in -DestinationPath $dest -Force -ErrorAction Stop
+              Write-Host "[OK] Alternative extraction completed"
             }
           } catch {
             Write-Host "[ERR] Exception during extraction: $($_.Exception.Message)"
